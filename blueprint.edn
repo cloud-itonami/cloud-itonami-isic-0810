@@ -1,0 +1,10 @@
+{:itonami.blueprint/id "cloud-itonami-0810"
+ :itonami.blueprint/name "Community Quarry and Stone Supply"
+ :itonami.blueprint/isic-rev5 "0810"
+ :itonami.blueprint/domain :mining/quarrying
+ :itonami.blueprint/license "AGPL-3.0-or-later"
+ :itonami.blueprint/social-impact [:local-economy :land-safety :supply-resilience]
+ :itonami.blueprint/governor :quarry-governor
+ :itonami.blueprint/robotics true
+ :itonami.blueprint/required-technologies [:robotics :identity :forms :dmn :bpmn :audit-ledger :telemetry]
+ :itonami.blueprint/status :public-oss}
