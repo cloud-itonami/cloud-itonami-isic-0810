@@ -63,36 +63,56 @@
                      :permit-id "PERMIT-001" :permit-valid? true
                      :involves-blasting? false :blast-clearance-confirmed? false
                      :quantity 100 :royalty-rate 2.0 :claimed-royalty 200.0
+                     :face-deviation-actual 0.02 :face-deviation-min -0.05 :face-deviation-max 0.05
+                     :robotics-sim-verified? false :robotics-sim-record nil
                      :extracted? false :shipped? false
                      :jurisdiction "JPN" :status :intake}
     "extraction-2" {:id "extraction-2" :site "Atlantis Face" :material-type :aggregate
                      :permit-id "PERMIT-ATL" :permit-valid? true
                      :involves-blasting? false :blast-clearance-confirmed? false
                      :quantity 50 :royalty-rate 3.0 :claimed-royalty 150.0
+                     :face-deviation-actual 0.02 :face-deviation-min -0.05 :face-deviation-max 0.05
+                     :robotics-sim-verified? false :robotics-sim-record nil
                      :extracted? false :shipped? false
                      :jurisdiction "ATL" :status :intake}
     "extraction-3" {:id "extraction-3" :site "South Face" :material-type :dimension-stone
                      :permit-id "PERMIT-003" :permit-valid? true
                      :involves-blasting? false :blast-clearance-confirmed? false
                      :quantity 20 :royalty-rate 5.0 :claimed-royalty 150.0
+                     :face-deviation-actual 0.02 :face-deviation-min -0.05 :face-deviation-max 0.05
+                     :robotics-sim-verified? false :robotics-sim-record nil
                      :extracted? false :shipped? false
                      :jurisdiction "JPN" :status :intake}
     "extraction-4" {:id "extraction-4" :site "East Face" :material-type :aggregate
                      :permit-id "PERMIT-004" :permit-valid? false
                      :involves-blasting? false :blast-clearance-confirmed? false
                      :quantity 80 :royalty-rate 2.0 :claimed-royalty 160.0
+                     :face-deviation-actual 0.02 :face-deviation-min -0.05 :face-deviation-max 0.05
+                     :robotics-sim-verified? false :robotics-sim-record nil
                      :extracted? false :shipped? false
                      :jurisdiction "JPN" :status :intake}
     "extraction-5" {:id "extraction-5" :site "West Face" :material-type :aggregate
                      :permit-id "PERMIT-005" :permit-valid? true
                      :involves-blasting? true :blast-clearance-confirmed? false
                      :quantity 200 :royalty-rate 2.0 :claimed-royalty 400.0
+                     :face-deviation-actual 0.02 :face-deviation-min -0.05 :face-deviation-max 0.05
+                     :robotics-sim-verified? false :robotics-sim-record nil
                      :extracted? false :shipped? false
                      :jurisdiction "JPN" :status :intake}
     "extraction-6" {:id "extraction-6" :site "Central Face" :material-type :aggregate
                      :permit-id "PERMIT-006" :permit-valid? true
                      :involves-blasting? true :blast-clearance-confirmed? true
                      :quantity 150 :royalty-rate 2.0 :claimed-royalty 300.0
+                     :face-deviation-actual 0.02 :face-deviation-min -0.05 :face-deviation-max 0.05
+                     :robotics-sim-verified? false :robotics-sim-record nil
+                     :extracted? false :shipped? false
+                     :jurisdiction "JPN" :status :intake}
+    "extraction-7" {:id "extraction-7" :site "Quarry Face 7" :material-type :aggregate
+                     :permit-id "PERMIT-007" :permit-valid? true
+                     :involves-blasting? false :blast-clearance-confirmed? false
+                     :quantity 100 :royalty-rate 2.0 :claimed-royalty 200.0
+                     :face-deviation-actual 0.30 :face-deviation-min -0.05 :face-deviation-max 0.05
+                     :robotics-sim-verified? true :robotics-sim-record nil
                      :extracted? false :shipped? false
                      :jurisdiction "JPN" :status :intake}}})
 
@@ -203,6 +223,8 @@
 (defn- extraction->tx [{:keys [id site material-type permit-id permit-valid?
                               involves-blasting? blast-clearance-confirmed?
                               quantity royalty-rate claimed-royalty
+                              face-deviation-actual face-deviation-min face-deviation-max
+                              robotics-sim-verified? robotics-sim-record
                               extracted? shipped?
                               jurisdiction status extraction-number shipment-number]}]
   (cond-> {:extraction/id id}
@@ -215,17 +237,24 @@
     quantity                                                  (assoc :extraction/quantity quantity)
     royalty-rate                                                (assoc :extraction/royalty-rate royalty-rate)
     claimed-royalty                                               (assoc :extraction/claimed-royalty claimed-royalty)
-    (some? extracted?)                                              (assoc :extraction/extracted? extracted?)
-    (some? shipped?)                                                  (assoc :extraction/shipped? shipped?)
-    jurisdiction                                                        (assoc :extraction/jurisdiction jurisdiction)
-    status                                                                (assoc :extraction/status status)
-    extraction-number                                                       (assoc :extraction/extraction-number extraction-number)
-    shipment-number                                                           (assoc :extraction/shipment-number shipment-number)))
+    face-deviation-actual                                           (assoc :extraction/face-deviation-actual face-deviation-actual)
+    face-deviation-min                                                (assoc :extraction/face-deviation-min face-deviation-min)
+    face-deviation-max                                                  (assoc :extraction/face-deviation-max face-deviation-max)
+    (some? robotics-sim-verified?)                                        (assoc :extraction/robotics-sim-verified? robotics-sim-verified?)
+    (some? robotics-sim-record)                                             (assoc :extraction/robotics-sim-record (enc robotics-sim-record))
+    (some? extracted?)                                                        (assoc :extraction/extracted? extracted?)
+    (some? shipped?)                                                          (assoc :extraction/shipped? shipped?)
+    jurisdiction                                                                (assoc :extraction/jurisdiction jurisdiction)
+    status                                                                        (assoc :extraction/status status)
+    extraction-number                                                             (assoc :extraction/extraction-number extraction-number)
+    shipment-number                                                                 (assoc :extraction/shipment-number shipment-number)))
 
 (def ^:private extraction-pull
   [:extraction/id :extraction/site :extraction/material-type :extraction/permit-id
    :extraction/permit-valid? :extraction/involves-blasting? :extraction/blast-clearance-confirmed?
    :extraction/quantity :extraction/royalty-rate :extraction/claimed-royalty
+   :extraction/face-deviation-actual :extraction/face-deviation-min :extraction/face-deviation-max
+   :extraction/robotics-sim-verified? :extraction/robotics-sim-record
    :extraction/extracted? :extraction/shipped?
    :extraction/jurisdiction :extraction/status :extraction/extraction-number :extraction/shipment-number])
 
@@ -237,6 +266,11 @@
      :blast-clearance-confirmed? (boolean (:extraction/blast-clearance-confirmed? m))
      :quantity (:extraction/quantity m) :royalty-rate (:extraction/royalty-rate m)
      :claimed-royalty (:extraction/claimed-royalty m)
+     :face-deviation-actual (:extraction/face-deviation-actual m)
+     :face-deviation-min (:extraction/face-deviation-min m)
+     :face-deviation-max (:extraction/face-deviation-max m)
+     :robotics-sim-verified? (boolean (:extraction/robotics-sim-verified? m))
+     :robotics-sim-record (dec* (:extraction/robotics-sim-record m))
      :extracted? (boolean (:extraction/extracted? m)) :shipped? (boolean (:extraction/shipped? m))
      :jurisdiction (:extraction/jurisdiction m) :status (:extraction/status m)
      :extraction-number (:extraction/extraction-number m) :shipment-number (:extraction/shipment-number m)}))

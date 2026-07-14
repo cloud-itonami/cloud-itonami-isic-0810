@@ -1,21 +1,31 @@
 (ns quarryops.sim
   "Demo driver -- `clojure -M:dev:run`. Walks a clean extraction
-  through intake -> jurisdiction assessment -> material extraction
-  (escalate/approve/commit) -> consignment shipment (escalate/approve/
-  commit), then a SEPARATE clean blasting extraction through the same
-  lifecycle (demonstrating the conditional blast-safety-clearance
-  check passing cleanly), then shows HARD-hold scenarios: a
-  jurisdiction with no spec-basis, a royalty mismatch (verified
-  first), an invalid extraction permit, and an unconfirmed blast-
-  safety clearance on a blasting extraction, a double extraction, and
-  a double shipment.
+  through intake -> jurisdiction assessment -> robot bench-face/
+  quarry-face verification mission (escalate/approve) -> material
+  extraction (escalate/approve/commit) -> consignment shipment
+  (escalate/approve/commit), then a SEPARATE clean blasting extraction
+  through the same lifecycle (demonstrating the conditional blast-
+  safety-clearance check passing cleanly), then shows HARD-hold
+  scenarios: a jurisdiction with no spec-basis, an extraction attempted
+  before its robot verification mission ever ran
+  (`:robotics-simulation-missing`, ADR-2607142800), a royalty mismatch
+  (verified first), an invalid extraction permit, an unconfirmed
+  blast-safety clearance on a blasting extraction, a robot mission
+  already on file whose own face-boundary-deviation reading fails an
+  INDEPENDENT recheck (`:robotics-simulation-out-of-tolerance`,
+  ADR-2607142800), a double extraction, and a double shipment.
 
   Like `retailops`/4711's and `freightops`/4920's own new checks,
-  this actor's new checks (`extraction-permit-invalid?`, `blast-
-  safety-clearance-unconfirmed?`) are evaluated directly at
-  `:extraction/extract` time rather than via a separate screening op
-  -- a real extraction decision validates permit status and blast-
-  safety clearance at the point of the act itself. Each check is
+  this actor's `extraction-permit-invalid?`/`blast-safety-clearance-
+  unconfirmed?` checks are evaluated directly at `:extraction/extract`
+  time rather than via a separate screening op -- a real extraction
+  decision validates permit status and blast-safety clearance at the
+  point of the act itself. `quarryops.robotics`'s robot verification
+  mission IS its own separate governed op
+  (`:robotics/simulate-quarry-face-verification`, never auto-eligible
+  at any phase -- see `quarryops.phase`), exercised directly below
+  exactly like ADR-2607142800's reference implementation
+  (`cloud-itonami-isic-2910`'s `automotive.robotics`). Each check is
   still exercised directly and independently below, one extraction
   per HARD-hold scenario, following the SAME 'exercise the failure
   mode directly, never only via a happy-path actuation' discipline
@@ -44,6 +54,10 @@
     (println (exec-op actor "t2" {:op :jurisdiction/assess :subject "extraction-1"} operator))
     (println (approve! actor "t2"))
 
+    (println "== robotics/simulate-quarry-face-verification extraction-1 (robot bench-face/quarry-face survey mission; escalates -- human approves) ==")
+    (println (exec-op actor "t2b" {:op :robotics/simulate-quarry-face-verification :subject "extraction-1"} operator))
+    (println (approve! actor "t2b"))
+
     (println "== extraction/extract extraction-1 (always escalates -- actuation/extract-material) ==")
     (let [r (exec-op actor "t3" {:op :extraction/extract :subject "extraction-1"} operator)]
       (println r)
@@ -64,7 +78,14 @@
     (println (exec-op actor "t6" {:op :jurisdiction/assess :subject "extraction-6"} operator))
     (println (approve! actor "t6"))
 
-    (println "== extraction/extract extraction-6 (blasting, clearance confirmed -- escalates -- human approves) ==")
+    (println "== extraction/extract extraction-6 before robotics simulation -> HARD hold (robotics-simulation-missing) ==")
+    (println (exec-op actor "t6b" {:op :extraction/extract :subject "extraction-6"} operator))
+
+    (println "== robotics/simulate-quarry-face-verification extraction-6 (escalates -- human approves) ==")
+    (println (exec-op actor "t6c" {:op :robotics/simulate-quarry-face-verification :subject "extraction-6"} operator))
+    (println (approve! actor "t6c"))
+
+    (println "== extraction/extract extraction-6 (blasting, clearance confirmed, robotics-sim on file -- escalates -- human approves) ==")
     (println (exec-op actor "t7" {:op :extraction/extract :subject "extraction-6"} operator))
     (println (approve! actor "t7"))
 
@@ -91,6 +112,13 @@
 
     (println "== extraction/extract extraction-5 (blasting, clearance unconfirmed -> HARD hold) ==")
     (println (exec-op actor "t14" {:op :extraction/extract :subject "extraction-5"} operator))
+
+    (println "== jurisdiction/assess extraction-7 (escalates -- human approves; sets up the robotics-simulation-out-of-tolerance test) ==")
+    (println (exec-op actor "t14b" {:op :jurisdiction/assess :subject "extraction-7"} operator))
+    (println (approve! actor "t14b"))
+
+    (println "== extraction/extract extraction-7 (robotics-sim on file, but face-boundary deviation 0.30 outside [-0.05,0.05] tolerance on independent recheck -> HARD hold) ==")
+    (println (exec-op actor "t14c" {:op :extraction/extract :subject "extraction-7"} operator))
 
     (println "== extraction/extract extraction-1 AGAIN (double-extraction -> HARD hold) ==")
     (println (exec-op actor "t15" {:op :extraction/extract :subject "extraction-1"} operator))

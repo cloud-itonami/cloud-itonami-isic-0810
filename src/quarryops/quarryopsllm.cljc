@@ -29,6 +29,7 @@
             [clojure.string :as str]
             [quarryops.facts :as facts]
             [quarryops.registry :as registry]
+            [quarryops.robotics :as robotics]
             [quarryops.store :as store]
             [langchain.model :as model]))
 
@@ -74,6 +75,35 @@
                     :legal-basis (:legal-basis sb)}
        :stake      nil
        :confidence 0.9})))
+
+(defn- simulate-quarry-face-verification
+  "Runs the robot bench-face/quarry-face verification mission
+  (`quarryops.robotics`) and drafts its result as a proposal. High
+  confidence -- the mission itself is deterministic simulated
+  telemetry derived from the extraction's own recorded face-
+  deviation fields, not an LLM guess; the Quarry Governor still
+  independently re-derives :passed? from those same fields before any
+  `:actuation/extract-material` proposal may commit -- see
+  `quarryops.governor`'s `robotics-simulation-violations`."
+  [db {:keys [subject]}]
+  (let [e (store/extraction db subject)]
+    (if (nil? e)
+      {:summary "対象採掘記録が見つかりません" :rationale "no extraction record"
+       :cites [] :effect :extraction/upsert :value {:id subject :robotics-sim-verified? false}
+       :stake nil :confidence 0.0}
+      (let [{:keys [mission actions passed?]} (robotics/simulate-quarry-face-verification subject e)]
+        {:summary    (str subject ": ベンチフェイス/採石場面検証ロボットミッション " (if passed? "合格" "不合格"))
+         :rationale  (str "mission=" (:mission/id mission) " actions=" (count actions)
+                          " face-deviation-actual=" (:face-deviation-actual e))
+         :cites      [(:mission/id mission)]
+         :effect     :extraction/upsert
+         :value      {:id subject
+                      :robotics-sim-verified? passed?
+                      :robotics-sim-record {:mission-id (:mission/id mission)
+                                            :actions (mapv #(dissoc % :action) actions)
+                                            :passed? passed?}}
+         :stake      nil
+         :confidence 0.95}))))
 
 (defn- propose-extraction
   "Draft the actual MATERIAL-EXTRACTION action -- extracting real
@@ -133,6 +163,7 @@
   (case op
     :extraction/intake           (normalize-intake db request)
     :jurisdiction/assess             (assess-jurisdiction db request)
+    :robotics/simulate-quarry-face-verification (simulate-quarry-face-verification db request)
     :extraction/extract                  (propose-extraction db request)
     :consignment/ship                        (propose-shipment db request)
     {:summary "未対応の操作" :rationale (str op) :cites []
@@ -155,6 +186,8 @@
        ":cites(使った事実キーのベクタ) "
        ":effect(:extraction/upsert|:assessment/set|:extraction/mark-extracted|"
        ":extraction/mark-shipped) "
+       "(:robotics/simulate-quarry-face-verification も :extraction/upsert で "
+       ":robotics-sim-verified? を提案する) "
        ":stake(:actuation/extract-material か :actuation/ship-consignment か nil) :confidence(0..1)。\n"
        "重要: 登録されていない法域の要件を絶対に創作してはいけません。"
        "spec-basisが無い場合は :cites を空にし confidence を上げないこと。"
@@ -163,6 +196,7 @@
 (defn- facts-for [st {:keys [op subject]}]
   (case op
     :jurisdiction/assess    {:extraction (store/extraction st subject)}
+    :robotics/simulate-quarry-face-verification {:extraction (store/extraction st subject)}
     :extraction/extract     {:extraction (store/extraction st subject)}
     :consignment/ship       {:extraction (store/extraction st subject)}
     {:extraction (store/extraction st subject)}))

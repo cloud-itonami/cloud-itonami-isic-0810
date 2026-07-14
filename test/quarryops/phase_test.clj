@@ -17,6 +17,17 @@
       (is (not (contains? auto :consignment/ship))
           (str "phase " n " must not auto-commit :consignment/ship")))))
 
+(deftest robotics-simulate-quarry-face-verification-never-auto-at-any-phase
+  (testing "the robot bench-face/quarry-face verification mission carries no direct capital risk, but is still never auto-eligible, matching every sibling verification op in this fleet"
+    (doseq [[n {:keys [auto]}] phase/phases]
+      (is (not (contains? auto :robotics/simulate-quarry-face-verification))
+          (str "phase " n " must not auto-commit :robotics/simulate-quarry-face-verification")))))
+
+(deftest robotics-simulate-quarry-face-verification-enabled-from-phase-2
+  (is (contains? (:writes (get phase/phases 2)) :robotics/simulate-quarry-face-verification))
+  (is (contains? (:writes (get phase/phases 3)) :robotics/simulate-quarry-face-verification))
+  (is (not (contains? (:writes (get phase/phases 1)) :robotics/simulate-quarry-face-verification))))
+
 (deftest phase-0-is-fully-read-only
   (is (empty? (:writes (get phase/phases 0)))))
 

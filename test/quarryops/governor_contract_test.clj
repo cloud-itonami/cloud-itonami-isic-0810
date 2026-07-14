@@ -34,6 +34,19 @@
   (exec-op actor (str tid-prefix "-assess") {:op :jurisdiction/assess :subject subject} operator)
   (approve! actor (str tid-prefix "-assess")))
 
+(defn- simulate-robotics!
+  "Walks `subject` through the robot bench-face/quarry-face
+  verification mission -> approve, leaving `:robotics-sim-verified?`
+  on file. Only meaningful to call for an extraction whose face-
+  boundary-deviation is actually within tolerance -- an out-of-
+  tolerance extraction still gets :robotics-sim-verified? recorded
+  (per whatever the mission itself found), but `quarryops.governor`'s
+  independent recheck HARD-holds regardless (see
+  `robotics-simulation-out-of-tolerance-is-held`)."
+  [actor tid-prefix subject]
+  (exec-op actor (str tid-prefix "-robotics") {:op :robotics/simulate-quarry-face-verification :subject subject} operator)
+  (approve! actor (str tid-prefix "-robotics")))
+
 (deftest clean-intake-auto-commits
   (let [[db actor] (fresh)
         res (exec-op actor "t1"
@@ -101,6 +114,7 @@
   (testing "the blast-safety-clearance check is CONDITIONAL: an extraction that does not involve blasting has no blast-safety requirement at all"
     (let [[_db actor] (fresh)
           _ (assess! actor "t7bpre" "extraction-1")
+          _ (simulate-robotics! actor "t7bpre2" "extraction-1")
           res (exec-op actor "t7b" {:op :extraction/extract :subject "extraction-1"} operator)]
       (is (= :interrupted (:status res)) "clean extraction still escalates for human sign-off, but is NOT a HARD hold"))))
 
@@ -108,6 +122,7 @@
   (testing "a clean, fully-assessed, matching-royalty, valid-permit extraction still ALWAYS interrupts for human approval -- actuation/extract-material is never auto"
     (let [[db actor] (fresh)
           _ (assess! actor "t8pre" "extraction-1")
+          _ (simulate-robotics! actor "t8pre2" "extraction-1")
           r1 (exec-op actor "t8" {:op :extraction/extract :subject "extraction-1"} operator)]
       (is (= :interrupted (:status r1)) "pauses for human approval even when governor-clean")
       (testing "approve -> commit, extraction record drafted"
@@ -132,6 +147,7 @@
   (testing "extracting the same extraction record twice -> HOLD on the second attempt"
     (let [[db actor] (fresh)
           _ (assess! actor "t10pre" "extraction-1")
+          _ (simulate-robotics! actor "t10pre2" "extraction-1")
           _ (exec-op actor "t10a" {:op :extraction/extract :subject "extraction-1"} operator)
           _ (approve! actor "t10a")
           res (exec-op actor "t10" {:op :extraction/extract :subject "extraction-1"} operator)]
@@ -149,6 +165,33 @@
       (is (= :hold (get-in res [:state :disposition])))
       (is (some #{:already-shipped} (-> (store/ledger db) last :basis)))
       (is (= 1 (count (store/shipment-history db))) "still only the one earlier shipment"))))
+
+(deftest robotics-simulation-always-needs-approval
+  (testing "robotics/simulate-quarry-face-verification is never in any phase's :auto set -- always human approval, even when clean"
+    (let [[db actor] (fresh)
+          res (exec-op actor "t12" {:op :robotics/simulate-quarry-face-verification :subject "extraction-1"} operator)]
+      (is (= :interrupted (:status res)))
+      (let [r2 (approve! actor "t12")]
+        (is (= :commit (get-in r2 [:state :disposition])))
+        (is (true? (:robotics-sim-verified? (store/extraction db "extraction-1"))))))))
+
+(deftest extraction-without-robotics-simulation-is-held
+  (testing "extraction/extract before the robot bench-face/quarry-face verification mission ever ran -> HOLD (robotics-simulation-missing)"
+    (let [[db actor] (fresh)
+          _ (assess! actor "t13pre" "extraction-1")
+          res (exec-op actor "t13" {:op :extraction/extract :subject "extraction-1"} operator)]
+      (is (= :hold (get-in res [:state :disposition])))
+      (is (some #{:robotics-simulation-missing} (-> (store/ledger db) last :basis)))
+      (is (empty? (store/extraction-history db))))))
+
+(deftest robotics-simulation-out-of-tolerance-is-held
+  (testing "extraction-7 has a robotics-sim already on file, but its own face-boundary-deviation reading falls outside its own tolerance bounds on INDEPENDENT recheck -> HOLD, never trusts the on-file verdict alone"
+    (let [[db actor] (fresh)
+          _ (assess! actor "t14pre" "extraction-7")
+          res (exec-op actor "t14" {:op :extraction/extract :subject "extraction-7"} operator)]
+      (is (= :hold (get-in res [:state :disposition])))
+      (is (some #{:robotics-simulation-out-of-tolerance} (-> (store/ledger db) last :basis)))
+      (is (empty? (store/extraction-history db))))))
 
 (deftest every-decision-leaves-one-ledger-fact
   (testing "write-only-through-ledger: N operations -> N ledger facts"

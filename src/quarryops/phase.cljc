@@ -4,8 +4,10 @@
     Phase 0  read-only        -- no writes, still governor-gated.
     Phase 1  assisted-intake  -- extraction intake allowed, every
                                  write needs human approval.
-    Phase 2  assisted-assess  -- adds jurisdiction assessment writes,
-                                 still approval.
+    Phase 2  assisted-assess  -- adds jurisdiction assessment writes
+                                 + robot bench-face/quarry-face
+                                 verification-mission writes, still
+                                 approval.
     Phase 3  supervised auto  -- governor-clean, high-confidence
                                  `:extraction/intake` (no capital risk
                                  yet) may auto-commit. `:extraction/
@@ -20,13 +22,17 @@
   human quarry operator's call. `quarryops.governor`'s `:actuation/
   extract-material`/`:actuation/ship-consignment` high-stakes gate
   enforces the same invariant independently -- two layers, not one,
-  agree on this. Like every prior sibling's phase 3 `:auto` set, this
-  domain has only ONE member (`:extraction/intake`) -- no separate
-  no-capital-risk 'file' lifecycle distinct from the extraction
-  itself.")
+  agree on this. `:robotics/simulate-quarry-face-verification` is
+  likewise never auto-eligible, at any phase -- the same posture
+  every sibling's screening/verification op has. Like every prior
+  sibling's phase 3 `:auto` set, this domain has only ONE member
+  (`:extraction/intake`) -- no separate no-capital-risk 'file'
+  lifecycle distinct from the extraction itself.")
 
 (def read-ops  #{})
-(def write-ops #{:extraction/intake :jurisdiction/assess :extraction/extract :consignment/ship})
+(def write-ops #{:extraction/intake :jurisdiction/assess
+                 :robotics/simulate-quarry-face-verification
+                 :extraction/extract :consignment/ship})
 
 ;; NOTE the invariant: `:extraction/extract`/`:consignment/ship` are
 ;; members of `write-ops` (governor-gated like any write) but are
@@ -37,7 +43,8 @@
   auto-commit when governor-clean>}."
   {0 {:label "read-only"       :writes #{}                                                                   :auto #{}}
    1 {:label "assisted-intake" :writes #{:extraction/intake}                                                  :auto #{}}
-   2 {:label "assisted-assess" :writes #{:extraction/intake :jurisdiction/assess}                              :auto #{}}
+   2 {:label "assisted-assess" :writes #{:extraction/intake :jurisdiction/assess
+                                         :robotics/simulate-quarry-face-verification}                        :auto #{}}
    3 {:label "supervised-auto" :writes write-ops
       :auto #{:extraction/intake}}})
 

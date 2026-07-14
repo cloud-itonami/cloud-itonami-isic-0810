@@ -86,14 +86,14 @@ extraction intake + jurisdiction facts (quarryops.facts, spec-cited)
    ┌───────────────────────┐   proposal      ┌───────────────────────┐
    │ QuarryOps-LLM         │ ─────────────▶ │ Quarry Governor               │  (independent system)
    │ (sealed)              │  + citations    │ spec-basis · evidence-       │
-   └───────────────────────┘                 │ incomplete · royalty-        │
-          │                 commit ◀┼ mismatch (ground-truth) ·        │
-          │                         │ extraction-permit-invalid              │
-    record + ledger        escalate ┼ (FLAGSHIP NEW) · blast-safety-            │
-          │              (ALWAYS for│ clearance-unconfirmed (conditional,       │
-          │       :actuation/extract│ NEW) · already-extracted ·                │
-          │       -material/        │ already-shipped                           │
-          │       :actuation/ship-  │                                            │
+   └───────────────────────┘                 │ incomplete · robotics-        │
+          │                 commit ◀┼ simulation missing/out-of-        │
+          │                         │ tolerance (NEW, ADR-2607150600) ·       │
+    record + ledger        escalate ┼ royalty-mismatch (ground-truth) ·        │
+          │              (ALWAYS for│ extraction-permit-invalid (FLAGSHIP       │
+          │       :actuation/extract│ NEW) · blast-safety-clearance-             │
+          │       -material/        │ unconfirmed (conditional, NEW) ·            │
+          │       :actuation/ship-  │ already-extracted · already-shipped          │
           │       consignment)       │                                            │
           ▼                          └───────────────────────┘
       human approval
@@ -102,18 +102,30 @@ extraction intake + jurisdiction facts (quarryops.facts, spec-cited)
 **The QuarryOps-LLM never extracts material or ships a consignment the
 Quarry Governor would reject, and never does so without a human sign-
 off.** Hard violations (fabricated regulatory requirements; unsupported
-evidence; a royalty mismatch; an invalid extraction permit; an
-unconfirmed blast-safety clearance on a blasting extraction; a double
-extraction/shipment) force **hold** and *cannot* be approved past; a
-clean extraction/shipment proposal still always routes to a human.
+evidence; a robot verification mission that never ran or that
+independently re-checks out-of-tolerance; a royalty mismatch; an
+invalid extraction permit; an unconfirmed blast-safety clearance on a
+blasting extraction; a double extraction/shipment) force **hold** and
+*cannot* be approved past; a clean extraction/shipment proposal still
+always routes to a human.
 
 ## Run
 
 ```bash
-clojure -M:dev:run     # walk two clean extraction+shipment lifecycles (no-blast, blast-confirmed), plus four HARD-hold cases, through the actor
+clojure -M:dev:run     # walk two clean extraction+shipment lifecycles (no-blast, blast-confirmed), plus six HARD-hold cases, through the actor
 clojure -M:dev:test    # governor contract · phase invariants · store parity · registry conformance · facts coverage
 clojure -M:lint        # clj-kondo (errors fail; CI mirrors this)
 ```
+
+## Ops
+
+| Op | Effect |
+|---|---|
+| `:extraction/intake` | normalize extraction directory patch (phase 3 may auto-commit when clean) |
+| `:jurisdiction/assess` | per-jurisdiction mine-safety/explosives-blast-safety evidence checklist (always human) |
+| `:robotics/simulate-quarry-face-verification` | robot bench-face/quarry-face verification mission (always human; required on file before extraction) |
+| `:extraction/extract` | draft material-extraction record (always human; HARD hold if robotics-sim missing or independently out-of-tolerance, royalty mismatch, invalid permit, or unconfirmed blast-safety clearance) |
+| `:consignment/ship` | draft consignment-shipment record (always human) |
 
 ## Robotics premise
 
@@ -124,6 +136,17 @@ gated by the independent **Quarry Governor**. The governor never
 dispatches hardware itself; `:high`/`:safety-critical` actions (such
 as operating at a quarry face, near personnel or near blast zones)
 require human sign-off.
+
+**Robot process simulation is concrete, not just a flag**
+(ADR-2607150600, extending ADR-2607142800/ADR-2607011000):
+`quarryops.robotics` walks every extraction through a robot-executed
+bench-face/quarry-face verification mission (`kotoba.robotics`
+mission/action/telemetry-proof contracts) -- bench-face dimensional
+survey, core-sample quality assay, dust/particulate-emissions scan --
+before `:actuation/extract-material` is proposable. The Quarry
+Governor independently re-derives the extraction's own face-boundary-
+deviation tolerance from ground-truth fields, never trusting the
+mission's self-reported verdict alone.
 
 ## Open business
 
@@ -161,9 +184,10 @@ at all (unlike `retailops`/4711's own `kotoba-lang/retail` and
 | `src/quarryops/store.cljc` | **Store** protocol -- `MemStore` ‖ `DatomicStore` (`langchain.db`) + append-only audit ledger + extraction AND shipment history (dual history). The double-actuation guard checks dedicated `:extracted?`/`:shipped?` booleans rather than a `:status` value |
 | `src/quarryops/registry.cljc` | Extraction/shipment draft records, plus `royalty-matches-claim?` -- an honest reapplication of the SAME ground-truth-recompute discipline every sibling actor's own cost/total-matching check establishes |
 | `src/quarryops/facts.cljc` | Per-jurisdiction mine-safety AND explosives/blast-safety catalog with an official spec-basis citation per entry, honest coverage reporting -- ALL FOUR seeded jurisdictions have a blast-safety sub-citation here |
-| `src/quarryops/quarryopsllm.cljc` | **QuarryOps-LLM** -- `mock-advisor` ‖ `llm-advisor`; intake/jurisdiction-assessment/extraction/shipment proposals |
-| `src/quarryops/governor.cljc` | **Quarry Governor** -- 5 HARD checks (spec-basis · evidence-incomplete · royalty-mismatch · extraction-permit-invalid, FLAGSHIP NEW, the 76th unconditional-evaluation-discipline grounding · blast-safety-clearance-unconfirmed, CONDITIONAL, the 77th grounding) + 2 double-actuation guards + 1 soft (confidence/actuation gate) |
-| `src/quarryops/phase.cljc` | **Phase 0→3** -- read-only → assisted intake → assisted assess → supervised (extraction/shipment always human; extraction intake is the ONLY auto-eligible op, no direct capital risk) |
+| `src/quarryops/quarryopsllm.cljc` | **QuarryOps-LLM** -- `mock-advisor` ‖ `llm-advisor`; intake/jurisdiction-assessment/robotics-simulation/extraction/shipment proposals |
+| `src/quarryops/robotics.cljc` | Robot bench-face/quarry-face verification mission (`kotoba.robotics` mission/action/telemetry-proof) + `face-boundary-deviation-out-of-range?` ground-truth check + `simulation-out-of-tolerance?` independent recheck for the governor (ADR-2607142800/ADR-2607150600) |
+| `src/quarryops/governor.cljc` | **Quarry Governor** -- 6 HARD checks (spec-basis · evidence-incomplete · robotics-simulation missing/out-of-tolerance, NEW (ADR-2607150600) · royalty-mismatch · extraction-permit-invalid, FLAGSHIP NEW, the 76th unconditional-evaluation-discipline grounding · blast-safety-clearance-unconfirmed, CONDITIONAL, the 77th grounding) + 2 double-actuation guards + 1 soft (confidence/actuation gate) |
+| `src/quarryops/phase.cljc` | **Phase 0→3** -- read-only → assisted intake → assisted assess (+ robotics simulation) → supervised (extraction/shipment always human; extraction intake is the ONLY auto-eligible op, no direct capital risk) |
 | `src/quarryops/operation.cljc` | **OperationActor** -- langgraph StateGraph |
 | `src/quarryops/sim.cljc` | demo driver |
 | `test/quarryops/*_test.clj` | governor contract · phase invariants · store parity · registry conformance · facts coverage |
@@ -178,7 +202,8 @@ own `docs/business-model.md` names in its Offer:
 | Covered | Not covered (out of scope for this R0) |
 |---|---|
 | Extraction intake + per-jurisdiction evidence checklisting, HARD-gated on an official spec-basis citation (`:extraction/intake`/`:jurisdiction/assess`) | Real extraction/haul-equipment integration, real geological/grade-quality judgment (see `quarryops.facts`'s docstring) |
-| Material extraction, HARD-gated on full evidence, a matching royalty claim, a valid extraction permit and a confirmed blast-safety clearance (when applicable), plus a double-extraction guard (`:actuation/extract-material`) | |
+| Robot bench-face/quarry-face verification mission, HARD-gated as required-on-file before extraction (`:robotics/simulate-quarry-face-verification`) -- a real simulated robot mission, not merely a declared `:robotics` flag (ADR-2607142800/ADR-2607150600) | Real robot-cell telemetry integration -- `quarryops.robotics` remains "policy, not control" by design |
+| Material extraction, HARD-gated on full evidence, a robot verification mission on file that INDEPENDENTLY re-checks in-tolerance, a matching royalty claim, a valid extraction permit and a confirmed blast-safety clearance (when applicable), plus a double-extraction guard (`:actuation/extract-material`) | |
 | Consignment shipment, HARD-gated on full evidence, plus a double-shipment guard (`:actuation/ship-consignment`) | |
 | Immutable audit ledger for every intake/assessment/extraction/shipment decision | |
 

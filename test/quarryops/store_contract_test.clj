@@ -23,9 +23,12 @@
       (is (true? (:involves-blasting? (store/extraction s "extraction-5"))))
       (is (false? (:blast-clearance-confirmed? (store/extraction s "extraction-5"))))
       (is (true? (:blast-clearance-confirmed? (store/extraction s "extraction-6"))))
+      (is (false? (:robotics-sim-verified? (store/extraction s "extraction-1"))) "no robotics mission has run yet")
+      (is (true? (:robotics-sim-verified? (store/extraction s "extraction-7"))) "seeded as already-on-file")
+      (is (= 0.30 (:face-deviation-actual (store/extraction s "extraction-7"))))
       (is (false? (:extracted? (store/extraction s "extraction-1"))))
       (is (false? (:shipped? (store/extraction s "extraction-1"))))
-      (is (= ["extraction-1" "extraction-2" "extraction-3" "extraction-4" "extraction-5" "extraction-6"]
+      (is (= ["extraction-1" "extraction-2" "extraction-3" "extraction-4" "extraction-5" "extraction-6" "extraction-7"]
              (mapv :id (store/all-extractions s))))
       (is (nil? (store/assessment-of s "extraction-1")))
       (is (= [] (store/ledger s)))
@@ -44,6 +47,13 @@
                                  :value {:id "extraction-1" :site "North Face"}})
         (is (= "North Face" (:site (store/extraction s "extraction-1"))))
         (is (= 200.0 (:claimed-royalty (store/extraction s "extraction-1"))) "unrelated field preserved"))
+      (testing "robotics-sim result commits via :extraction/upsert and reads back"
+        (store/commit-record! s {:effect :extraction/upsert
+                                 :value {:id "extraction-1" :robotics-sim-verified? true
+                                        :robotics-sim-record {:mission-id "m-1" :passed? true}}})
+        (is (true? (:robotics-sim-verified? (store/extraction s "extraction-1"))))
+        (is (= {:mission-id "m-1" :passed? true} (:robotics-sim-record (store/extraction s "extraction-1"))))
+        (is (= 200.0 (:claimed-royalty (store/extraction s "extraction-1"))) "unrelated field still preserved"))
       (testing "assessment payloads commit and read back"
         (store/commit-record! s {:effect :assessment/set :path ["extraction-1"]
                                  :payload {:jurisdiction "JPN" :checklist ["a" "b"]}})

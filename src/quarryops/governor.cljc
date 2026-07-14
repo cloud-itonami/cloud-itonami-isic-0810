@@ -21,7 +21,7 @@
   auditable; royalty records are immutable') names exactly the checks
   below.
 
-  Five checks, in priority order, ALL HARD violations: a human
+  Six checks, in priority order, ALL HARD violations: a human
   approver CANNOT override them. The confidence/actuation gate is
   SOFT: it asks a human to look (low confidence / actuation), and the
   human may approve -- but see `quarryops.phase`: for `:stake
@@ -38,7 +38,29 @@
                                        jurisdiction actually been
                                        assessed with a full evidence
                                        checklist on file?
-    3. Royalty mismatch            -- for `:extraction/extract`,
+    3. Robot simulation missing or
+       independently out-of-
+       tolerance                    -- for `:extraction/extract`, has
+                                       the robot bench-face/quarry-
+                                       face verification mission
+                                       (`quarryops.robotics`) actually
+                                       run and been recorded on the
+                                       extraction
+                                       (`:robotics-sim-verified?`)?
+                                       AND INDEPENDENTLY recompute
+                                       whether the extraction's own
+                                       recorded face-boundary-
+                                       deviation reading falls out of
+                                       its own recorded tolerance
+                                       bounds (`quarryops.robotics/
+                                       simulation-out-of-tolerance?`),
+                                       ignoring whatever :passed?
+                                       verdict the mission run itself
+                                       stored -- the same 'ground
+                                       truth, not self-report'
+                                       discipline check 4 below uses
+                                       for royalty.
+    4. Royalty mismatch            -- for `:extraction/extract`,
                                        INDEPENDENTLY recompute whether
                                        the extraction's own `:claimed-
                                        royalty` equals `quantity x
@@ -54,7 +76,7 @@
                                        establish, reapplied to a
                                        quarry royalty line -- not
                                        claimed as new.
-    4. Extraction permit invalid   -- for `:extraction/extract`,
+    5. Extraction permit invalid   -- for `:extraction/extract`,
                                        INDEPENDENTLY verify the
                                        extraction's own `:permit-
                                        valid?` is true -- the FLAGSHIP
@@ -87,7 +109,7 @@
                                        UNCONDITIONALLY (every
                                        extraction needs a valid
                                        permit).
-    5. Blast safety clearance
+    6. Blast safety clearance
        unconfirmed                    -- for `:extraction/extract`,
                                        for an extraction whose own
                                        record declares `:involves-
@@ -139,7 +161,7 @@
                                        `retailops`/4711's and
                                        `freightops`/4920's own full-
                                        coverage sub-citations).
-    6. Confidence floor / actuation
+    7. Confidence floor / actuation
        gate                          -- LLM confidence below threshold,
                                        OR the op is `:extraction/
                                        extract`/`:consignment/ship`
@@ -156,6 +178,7 @@
   bug (ADR-2607071320)."
   (:require [quarryops.facts :as facts]
             [quarryops.registry :as registry]
+            [quarryops.robotics :as robotics]
             [quarryops.store :as store]))
 
 (def confidence-floor 0.6)
@@ -196,6 +219,29 @@
                       (:jurisdiction e) (:checklist assessment)))
         [{:rule :evidence-incomplete
           :detail "法域の必要書類(採掘許可記録/測量記録/運搬記録/発破安全確認記録等)が充足していない状態での提案"}]))))
+
+(defn- robotics-simulation-violations
+  "For `:extraction/extract`: HARD hold if the robot bench-face/
+  quarry-face verification mission (`quarryops.robotics`) never ran
+  and was recorded on the extraction (`:robotics-sim-verified?`), OR
+  if it did but an INDEPENDENT recompute of the extraction's own
+  face-boundary-deviation fields (`quarryops.robotics/simulation-out-
+  of-tolerance?`) says out-of-tolerance right now -- never trusts the
+  mission's own stored :passed? verdict alone, the same discipline
+  `royalty-mismatch-violations` below uses for royalty."
+  [{:keys [op subject]} st]
+  (when (= op :extraction/extract)
+    (let [e (store/extraction st subject)]
+      (cond
+        (not (:robotics-sim-verified? e))
+        [{:rule :robotics-simulation-missing
+          :detail (str subject " のベンチフェイス/採石場面検証ロボットミッションが未実行・未合格")}]
+
+        (robotics/simulation-out-of-tolerance? e)
+        [{:rule :robotics-simulation-out-of-tolerance
+          :detail (str subject " の切羽境界偏差実測値("
+                       (:face-deviation-actual e) ")が独立再検証で許容範囲["
+                       (:face-deviation-min e) "," (:face-deviation-max e) "]を逸脱")}]))))
 
 (defn- royalty-mismatch-violations
   "For `:extraction/extract`, INDEPENDENTLY recompute whether the
@@ -267,6 +313,7 @@
   (let [hard (into []
                    (concat (spec-basis-violations request proposal)
                            (evidence-incomplete-violations request st)
+                           (robotics-simulation-violations request st)
                            (royalty-mismatch-violations request st)
                            (extraction-permit-invalid-violations request st)
                            (blast-safety-clearance-unconfirmed-violations request st)
