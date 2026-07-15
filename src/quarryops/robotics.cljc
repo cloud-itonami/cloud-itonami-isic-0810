@@ -61,19 +61,44 @@
   the stored :passed? value, before any `:actuation/extract-material`
   proposal may commit.
 
-  Honest scope (ADR-2607152000): 2D projection only (`physics-2d` has
-  no 3D solver) -- y is height, x is unused/lateral, so no rollout/
-  bounce-out distance is modeled at all (a genuine limitation vs. a
-  real 3D rockfall-trajectory tool such as CRSP/RocFall); the fragment
-  is approximated as a single cubic AABB block (edge length derived
-  from `:fragment-mass-kg` at a disclosed typical hard-rock bulk
-  density, `rock-density-kg-per-m3` below -- not surveyed real block
-  geometry); `fragment-restitution`/friction are disclosed engineering
-  priors, not measured per-site values; no wind, rotation, multi-
-  fragment interaction, or lateral rollout distance is modeled. What
-  IS real: an actual `physics-2d/world-step` tick-by-tick free-fall +
-  impact + settling trajectory, read back tick by tick, not
-  synthesized after the fact.
+  ADR-2607995500 EXTENDS this ns with a real CAD/BREP bridge
+  (`quarryops.cad`), closing the gap this ns's docstring used to
+  disclose ('the fragment is approximated as a single cubic AABB block
+  ... not surveyed real block geometry'): the `:fragment` body's AABB
+  half-extents are now genuinely derived from `quarryops.cad/
+  envelope-dims-mm`'s tessellated loose-block envelope dims for THIS
+  extraction (`fragment-half-extents-m` below) when a real
+  `:fragment-length-mm`/`:fragment-width-mm`/`:fragment-height-mm`
+  bench-face-survey measurement is on file, instead of always being the
+  density-assumed cube `fragment-half-extent-m` derives from mass
+  alone. Mirrors `autoparts.robotics`'s/`fab.simphysics`'s own CAD
+  bridge in SPIRIT (deriving the MOVING body from CAD, leaving the
+  static `:catch-bench-floor` body a FIXED test-rig constant,
+  unchanged), but NOT in the specific axis mapping -- see `quarryops.
+  cad`'s own docstring and `fragment-half-extents-m` below for why this
+  vertical's VERTICAL free-fall physics (gravity along Y) genuinely
+  uses HEIGHT, not length/width, as its fall-axis half-extent, the
+  opposite of autoparts'/fab's HORIZONTAL pull-axis physics -- checked
+  against this ns's own placement algebra and `physics_2d`'s
+  `test-aabb-aabb` narrowphase source, not assumed to carry over
+  unchanged from the other two verticals' shape.
+
+  Honest scope (ADR-2607152000, extended by ADR-2607995500): 2D
+  projection only (`physics-2d` has no 3D solver) -- y is height, x is
+  unused/lateral, so no rollout/bounce-out distance is modeled at all
+  (a genuine limitation vs. a real 3D rockfall-trajectory tool such as
+  CRSP/RocFall); the fragment defaults to a single cubic AABB block
+  (edge length derived from `:fragment-mass-kg` at a disclosed typical
+  hard-rock bulk density, `rock-density-kg-per-m3` below) UNLESS the
+  extraction carries a real `:fragment-length-mm`/`:fragment-width-mm`/
+  `:fragment-height-mm` bench-face-survey measurement, in which case
+  the fragment's own real, potentially non-cubic surveyed dimensions
+  are used instead (ADR-2607995500); `fragment-restitution`/friction
+  are disclosed engineering priors, not measured per-site values; no
+  wind, rotation, multi-fragment interaction, or lateral rollout
+  distance is modeled. What IS real: an actual `physics-2d/world-step`
+  tick-by-tick free-fall + impact + settling trajectory, read back tick
+  by tick, not synthesized after the fact.
 
   Pure data + pure functions -- no real robot I/O, no network.
   `kotoba.robotics` is itself \"policy, not control\"; `physics-2d`'s
@@ -82,6 +107,7 @@
   sibling namespace in this actor -- tests and the demo run without a
   network."
   (:require [kotoba.robotics :as robotics]
+            [quarryops.cad :as cad]
             [physics-2d :as p2d]))
 
 (def mission-actions
@@ -124,9 +150,13 @@
 (def ^:const rock-density-kg-per-m3
   "Disclosed engineering prior: typical bulk density of quarried hard
   rock (limestone/granite aggregate), ~2.6-2.7 t/m^3 per standard
-  geotechnical/mining references -- used ONLY to size the fragment's
-  AABB collider from its own recorded `:fragment-mass-kg` (a cosmetic
-  collision-shape input, not a stored/measured per-fragment geometry)."
+  geotechnical/mining references -- used to size the fragment's AABB
+  collider from its own recorded `:fragment-mass-kg` alone (a cosmetic
+  collision-shape input, not a stored/measured per-fragment geometry)
+  ONLY when the extraction carries no real per-fragment survey
+  measurement (ADR-2607995500 -- see `quarryops.cad`, which redefines
+  this SAME figure rather than requiring it, for the circular-
+  dependency reason disclosed there)."
   2700.0)
 
 (def ^:const fragment-restitution
@@ -168,12 +198,57 @@
   real max-tick-budget fallback ADR-2607152000 calls for)."
   3000)
 
-(defn- fragment-half-extent-m
+(defn fragment-half-extent-m
   "Half edge-length (m) of a cubic AABB approximating a fragment of
   `fragment-mass-kg` at `rock-density-kg-per-m3` -- collision-shape
-  sizing only (see ns docstring)."
+  sizing only (see ns docstring). ADR-2607995500: no longer read
+  directly by `simulate-bench-face-settling` (superseded by
+  `quarryops.cad`-derived per-extraction dims when a real survey
+  measurement is on file, see `fragment-half-extents-m` below),
+  retained PUBLIC as a disclosed reference figure -- `quarryops.cad/
+  default-fragment-half-extent-m` is DELIBERATELY the exact same
+  formula (see `cad_test.clj`'s equality check of this fact), so an
+  extraction with no real `:fragment-*-mm` survey measurement on file
+  gets the SAME fragment size this fn always derived, before this ADR
+  and after it."
   [fragment-mass-kg]
   (/ (cbrt* (/ (double fragment-mass-kg) rock-density-kg-per-m3)) 2.0))
+
+(defn fragment-half-extents-m
+  "AABB half-extents (m) for the `:fragment` body, from `quarryops.cad/
+  envelope-dims-mm`'s REAL tessellated dims (mm) for `extraction` --
+  lateral half-width = length/2, VERTICAL (fall-axis) half-height =
+  height/2. GENUINELY DIFFERENT axis mapping from `autoparts.robotics/
+  specimen-half-extents-m`'s/`fab.simphysics/specimen-half-extents-m`'s
+  own length/width-only reading -- see `quarryops.cad`'s own docstring
+  for why: this vertical's physics is a VERTICAL free-fall under
+  gravity (the fall axis is Y, matching this ns's own `gravity`/
+  `simulate-bench-face-settling`), not a HORIZONTAL pull/approach, so
+  it is HEIGHT (not length/width) that genuinely drives the fall-axis
+  AABB half-extent this ns's placement algebra and `physics_2d`'s
+  `test-aabb-aabb` narrowphase actually integrate against; LENGTH here
+  only sizes the lateral collider footprint (cosmetic -- the wide,
+  `floor-half-width-m` 50.0m catch-bench floor never meaningfully
+  constrains it, confirmed by reading `physics_2d/test-aabb-aabb`'s own
+  source: the lateral `dx` term is always deeply negative for any
+  physically plausible fragment/floor width, so it never gates
+  collision), the SAME 'not consumed by the 2D physics, kept only so
+  the tessellated BREP envelope is a genuine 3D box' role LENGTH/WIDTH
+  play in `autoparts.cad`'s/`fab.cad`'s own docstrings, just on a
+  different axis pair for this vertical. `envelope-dims-mm` always
+  returns SOME dims (an extraction's own real `:fragment-*-mm` survey
+  fields when present, `quarryops.cad`'s disclosed formula-based
+  defaults when absent -- see that ns's docstring), so this always
+  succeeds; it is the INPUT (whether `extraction` carries a real survey
+  measurement) that varies, not this function's availability. PUBLIC
+  (unlike `autoparts.robotics/specimen-half-extents-m`, which is
+  private): exposed so a test/caller can directly verify CAD dims are
+  genuinely being read, mirroring `fab.simphysics/specimen-half-
+  extents-m`'s own public visibility for the same reason."
+  [extraction]
+  (let [{:keys [length-mm height-mm]} (cad/envelope-dims-mm extraction)]
+    {:half-w (/ length-mm 2000.0)
+     :half-h (/ height-mm 2000.0)}))
 
 (defn- run-until-settled
   "Steps `world` by `dt-s` up to `max-ticks` times, returning the full
@@ -201,7 +276,111 @@
 
     {:trajectory [{:tick :position :velocity} ...]
      :sim-settling-distance-m n :sim-impact-energy-j n
-     :sim-impact-velocity-mps n :ticks n :dt n}
+     :sim-impact-velocity-mps n :ticks n :dt n
+     :fragment-half-extents-m {:half-w n :half-h n}}
+
+  ADR-2607995500 EXTENDS this fn with a real CAD/BREP bridge: `extraction`
+  may also carry a real `:fragment-length-mm`/`:fragment-width-mm`/
+  `:fragment-height-mm` bench-face-survey measurement, in which case the
+  `:fragment` body's AABB half-extents are genuinely derived from
+  `quarryops.cad/envelope-dims-mm`'s tessellated dims for THIS extraction
+  (`fragment-half-extents-m`) instead of always being the density-assumed
+  cube `fragment-half-extent-m` derives from mass alone. When absent, the
+  SAME cube-shaped sizing this fn used before this ADR (see `quarryops.
+  cad`'s disclosed formula-based default -- `fragment-half-extents-m`
+  reduces to the identical cube in that case). The catch-bench `:floor`
+  body's AABB stays a FIXED test-rig constant, unchanged -- mirroring how
+  `autoparts.robotics`/`fab.simphysics` only ever derive the MOVING body
+  from CAD and leave the static boundary/fixture fixed.
+
+  GEOMETRY-INVARIANCE, VERIFIED EMPIRICALLY (checked against THIS
+  vertical's own physics, not assumed to behave like autoparts'/fab's
+  horizontal-approach case -- ADR-2607995500 explicitly calls for this;
+  see `robotics_test.clj` for the actual check, not just the algebra
+  below). `fragment-start-y` is deliberately computed as
+  `bench-drop-height-m + half-h`, i.e. the fragment's own BOTTOM face
+  (`fragment-start-y - half-h`) always starts EXACTLY
+  `bench-drop-height-m` above the floor's TOP face (`floor-center-y +
+  floor-half-height-m`, which is `0.0` by construction), regardless of
+  `half-h` -- it cancels out of the placement algebra in EXACT
+  (real-number) arithmetic, the SAME technique `autoparts.robotics`'s
+  `jaw-x0` / `fab.simphysics`'s `wall-x` use on their own horizontal
+  travel axis, applied here to the VERTICAL fall axis instead.
+
+  UNLIKE those two verticals, this vertical's pre-collision motion is
+  NOT constant-velocity -- the fragment ACCELERATES under gravity
+  before contact, so IN PRINCIPLE a floating-point-rounding-induced
+  shift of which TICK first detects contact (the kind of real IEEE-754
+  double-rounding effect `fab.simphysics`'s own docstring discloses for
+  its horizontal case) could move the recorded impact velocity by an
+  amount on the order of one tick's worth of gravitational acceleration
+  (`g-mps2 * dt-s` =~ 0.196 m/s). An EARLIER DRAFT of this docstring
+  assumed this WOULD happen, by analogy with `fab.simphysics`'s own
+  finding -- WRONG for `:sim-impact-velocity-mps`/`:sim-impact-energy-j`/
+  `:ticks`, per ADR-2607995500's own instruction to verify rather than
+  assume: an adversarial sweep in `robotics_test.clj` (dozens of drop
+  heights x fragment geometries spanning `half-h` from 0.0005mm to
+  2500mm) found those THREE fields BIT-IDENTICAL across geometry in
+  every case tried -- no divergence found. The likely structural reason
+  (not independently proven, but consistent with every observation):
+  `fab.simphysics`'s own knife-edge exists because that ns's
+  `approach-gap-m` was CONSTRUCTED (`4.0 * travel-distance-m`) so the
+  exact collision boundary lands precisely on an integer tick multiple
+  -- a designed zero-margin case, maximally sensitive to any
+  perturbation. This ns's `dt-s` is a plain FIXED constant, not derived
+  from `bench-drop-height-m` at all, so for an arbitrary drop height
+  the discrete collision tick generically lands with a healthy margin
+  (bounded below by roughly the per-tick fall distance near impact, not
+  by IEEE-754 epsilon) -- so a `half-h` perturbation many orders of
+  magnitude larger than floating-point rounding still essentially never
+  flips it. This is NOT a proof that no input could ever exhibit a
+  fab-style knife-edge (a drop height chosen adversarially to land the
+  analytic crossing within picometers of a tick boundary could still,
+  in principle, do so), only an honest report of what was actually
+  checked and found -- see `robotics_test.clj` for the swept range.
+
+  `:sim-settling-distance-m` is a SEPARATE, SMALLER, genuinely real
+  exception the same sweep caught (also NOT assumed correctly in the
+  earlier draft, which claimed all four summary fields were bit-
+  identical): it accumulates a tiny (empirically bounded well under
+  1e-9, typically ~1-2 ULP, across the whole sweep) floating-point
+  divergence across geometry, DESPITE `:sim-impact-velocity-mps`/
+  `:sim-impact-energy-j`/`:ticks` staying exactly invariant in the SAME
+  runs -- because `:sim-settling-distance-m` reads `final-y` off
+  whichever tick `run-until-settled` stops at (empirically always
+  `max-ticks`, see the note below), by which point ~3000 ticks of the
+  fragment's PERSISTENT resting-velocity oscillation have accumulated
+  their own independent rounding noise, whose exact intermediate
+  values depend on `half-h`/`half-w` even though the impact dynamics
+  that precede them do not. A real, disclosed, BOUNDED (not silently
+  rounded away) divergence -- see `robotics_test.clj` for the measured
+  magnitude.
+
+  A SEPARATE, genuinely orthogonal observation surfaced while verifying
+  the above (disclosed here because it shaped how `robotics_test.clj`
+  asserts `:ticks`, NOT a new behavior introduced by this ADR -- CONFIRMED
+  present, bit-for-bit, in the pre-ADR-2607995500 code too): for every
+  drop height tried (0.001m to 15m), `run-until-settled` reaches
+  `max-ticks` rather than the early-settle path -- the fragment's
+  resting-contact dynamics under `fragment-restitution` 0.3 converge to
+  a small but PERSISTENT non-decaying velocity oscillation (empirically
+  observed ~0.045 m/s for the 180kg/4.0m case) that never drops below
+  `settle-eps-mps` (0.01) for `settle-run-ticks` consecutive ticks. This
+  is a pre-existing property of this ns's resting-contact handling, not
+  a CAD/geometry effect (confirmed identical across every geometry
+  tested) and not something this ADR changes or fixes -- out of scope
+  here; `:ticks` being invariant across geometry in the observations
+  above is therefore, honestly, partly a trivial consequence of always
+  hitting the same fixed `max-ticks` ceiling, not solely evidence of
+  the deeper collision-timing invariance argued above for `:sim-impact-
+  velocity-mps`/`:sim-impact-energy-j`.
+
+  `:trajectory` itself is NOT geometry-invariant (verified in
+  `robotics_test.clj`, mirroring autoparts'/fab's own disclosed
+  trajectory-position sensitivity): `fragment-start-y` and every
+  subsequent position sample genuinely shift with `half-h`, even though
+  the summary `:sim-impact-velocity-mps`/`:sim-impact-energy-j`/`:sim-
+  settling-distance-m` readings do not, in every case checked.
 
   `:sim-settling-distance-m` is the ACTUAL net vertical distance the
   fragment's center travelled from its starting position to its final
@@ -217,19 +396,22 @@
   simulated reading. `:sim-impact-energy-j` is `0.5 * fragment-mass-kg
   * sim-impact-velocity-mps^2` -- the REAL kinetic energy the fragment
   actually delivered to the catch-bench floor at impact, derived from
-  the real simulated velocity, not invented."
-  [{:keys [fragment-mass-kg bench-drop-height-m]}]
+  the real simulated velocity, not invented. `:fragment-half-extents-m`
+  in the return value is the REAL half-extents this run actually used,
+  so a caller/test can always confirm CAD geometry is genuinely being
+  read."
+  [{:keys [fragment-mass-kg bench-drop-height-m] :as extraction}]
   (let [mass (double fragment-mass-kg)
         drop-h (double bench-drop-height-m)
-        half-e (fragment-half-extent-m mass)
+        {:keys [half-w half-h] :as half-extents} (fragment-half-extents-m extraction)
         floor-center-y (- floor-half-height-m)
-        fragment-start-y (+ drop-h half-e)
+        fragment-start-y (+ drop-h half-h)
         fragment (p2d/make-body {:position [0.0 fragment-start-y]
                                   :velocity [0.0 0.0]
                                   :mass mass
                                   :restitution fragment-restitution
                                   :friction 0.0
-                                  :collider (p2d/make-aabb-collider half-e half-e)
+                                  :collider (p2d/make-aabb-collider half-w half-h)
                                   :user-data :fragment})
         floor (p2d/make-body {:position [0.0 floor-center-y]
                                :velocity [0.0 0.0]
@@ -251,7 +433,8 @@
      :sim-impact-velocity-mps v-impact
      :sim-impact-energy-j (* 0.5 mass v-impact v-impact)
      :ticks (count trajectory)
-     :dt dt-s}))
+     :dt dt-s
+     :fragment-half-extents-m half-extents}))
 
 ;; ───────────────────── extraction design record + tolerance (ADR-2607152000) ─────────────────────
 
@@ -273,14 +456,28 @@
   NOT a per-site measured spec."
   10.0)
 
-(defn- fragment-for
+(defn fragment-for
   "Fragment-simulation inputs for `extraction` -- its own permanent
   `:fragment-mass-kg`/`:bench-drop-height-m` fields (defaults applied
-  when absent), exactly the fields `simulate-bench-face-settling`
-  reads. Mirrors `automotive.robotics/design-for`'s shape."
-  [{:keys [fragment-mass-kg bench-drop-height-m]}]
+  when absent), plus (ADR-2607995500) its own OPTIONAL `:fragment-
+  length-mm`/`:fragment-width-mm`/`:fragment-height-mm` bench-face-
+  survey measurement fields, passed through UNCHANGED (nil stays nil
+  -- `quarryops.cad/envelope-dims-mm` supplies its own formula-based
+  fallback for whichever of these three is absent, keyed off the
+  resolved `:fragment-mass-kg` below, so this fn itself needs no
+  separate default for them). Exactly the fields `simulate-bench-face-
+  settling` reads. Mirrors `automotive.robotics/design-for`'s shape.
+  PUBLIC (ADR-2607995500 -- was private before): `quarryops.scene`
+  needs the SAME default-resolution `quarryops.robotics`'s own
+  `bench-face-settling-telemetry-for` already applies, so this is
+  shared rather than duplicated."
+  [{:keys [fragment-mass-kg bench-drop-height-m
+           fragment-length-mm fragment-width-mm fragment-height-mm]}]
   {:fragment-mass-kg (or fragment-mass-kg default-fragment-mass-kg)
-   :bench-drop-height-m (or bench-drop-height-m default-bench-drop-height-m)})
+   :bench-drop-height-m (or bench-drop-height-m default-bench-drop-height-m)
+   :fragment-length-mm fragment-length-mm
+   :fragment-width-mm fragment-width-mm
+   :fragment-height-mm fragment-height-mm})
 
 (defn- rated-height-for
   [{:keys [catch-bench-rated-height-m]}]
