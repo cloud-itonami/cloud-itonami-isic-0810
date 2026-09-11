@@ -65,7 +65,7 @@ autonomous, at any phase, by construction.** Two independent layers
 enforce this (`quarryops.governor`'s `:actuation/extract-material`/
 `:actuation/ship-consignment` high-stakes gate and `quarryops.phase`'s
 phase table, which never puts either op in any phase's `:auto` set) --
-see `quarryops.phase`'s docstring and `test/quarryops/phase_test.clj`'s
+see `quarryops.phase`'s docstring and `test/quarryops/phase_test.cljk`'s
 `extraction-extract-never-auto-at-any-phase`/`consignment-ship-never-
 auto-at-any-phase`. The actor may draft, check and recommend; a human
 quarry operator is always the one who actually extracts material or
@@ -206,15 +206,15 @@ at all (unlike `retailops`/4711's own `kotoba-lang/retail` and
 
 | File | Role |
 |---|---|
-| `src/quarryops/store.cljc` | **Store** protocol -- `MemStore` ‖ `DatomicStore` (`langchain.db`) + append-only audit ledger + extraction AND shipment history (dual history). The double-actuation guard checks dedicated `:extracted?`/`:shipped?` booleans rather than a `:status` value |
-| `src/quarryops/registry.cljc` | Extraction/shipment draft records, plus `royalty-matches-claim?` -- an honest reapplication of the SAME ground-truth-recompute discipline every sibling actor's own cost/total-matching check establishes |
-| `src/quarryops/facts.cljc` | Per-jurisdiction mine-safety AND explosives/blast-safety catalog with an official spec-basis citation per entry, honest coverage reporting -- ALL FOUR seeded jurisdictions have a blast-safety sub-citation here |
-| `src/quarryops/quarryopsllm.cljc` | **QuarryOps-LLM** -- `mock-advisor` ‖ `llm-advisor`; intake/jurisdiction-assessment/robotics-simulation/extraction/shipment proposals |
-| `src/quarryops/robotics.cljc` | Robot bench-face/quarry-face verification mission (`kotoba.robotics` mission/action/telemetry-proof) + a REAL `physics-2d`-backed time-stepped bench-face loose-block free-fall/settling simulation + `bench-face-settling-out-of-tolerance?` ground-truth check + `simulation-out-of-tolerance?` independent recheck for the governor (ADR-2607142800/ADR-2607150600/ADR-2607152000) |
-| `src/quarryops/governor.cljc` | **Quarry Governor** -- 6 HARD checks (spec-basis · evidence-incomplete · robotics-simulation missing/out-of-tolerance, NEW (ADR-2607150600) · royalty-mismatch · extraction-permit-invalid, FLAGSHIP NEW, the 76th unconditional-evaluation-discipline grounding · blast-safety-clearance-unconfirmed, CONDITIONAL, the 77th grounding) + 2 double-actuation guards + 1 soft (confidence/actuation gate) |
-| `src/quarryops/phase.cljc` | **Phase 0→3** -- read-only → assisted intake → assisted assess (+ robotics simulation) → supervised (extraction/shipment always human; extraction intake is the ONLY auto-eligible op, no direct capital risk) |
-| `src/quarryops/operation.cljc` | **OperationActor** -- langgraph StateGraph |
-| `src/quarryops/sim.cljc` | demo driver |
+| `src/quarryops/store.cljk` | **Store** protocol -- `MemStore` ‖ `DatomicStore` (`langchain.db`) + append-only audit ledger + extraction AND shipment history (dual history). The double-actuation guard checks dedicated `:extracted?`/`:shipped?` booleans rather than a `:status` value |
+| `src/quarryops/registry.cljk` | Extraction/shipment draft records, plus `royalty-matches-claim?` -- an honest reapplication of the SAME ground-truth-recompute discipline every sibling actor's own cost/total-matching check establishes |
+| `src/quarryops/facts.cljk` | Per-jurisdiction mine-safety AND explosives/blast-safety catalog with an official spec-basis citation per entry, honest coverage reporting -- ALL FOUR seeded jurisdictions have a blast-safety sub-citation here |
+| `src/quarryops/quarryopsllm.cljk` | **QuarryOps-LLM** -- `mock-advisor` ‖ `llm-advisor`; intake/jurisdiction-assessment/robotics-simulation/extraction/shipment proposals |
+| `src/quarryops/robotics.cljk` | Robot bench-face/quarry-face verification mission (`kotoba.robotics` mission/action/telemetry-proof) + a REAL `physics-2d`-backed time-stepped bench-face loose-block free-fall/settling simulation + `bench-face-settling-out-of-tolerance?` ground-truth check + `simulation-out-of-tolerance?` independent recheck for the governor (ADR-2607142800/ADR-2607150600/ADR-2607152000) |
+| `src/quarryops/governor.cljk` | **Quarry Governor** -- 6 HARD checks (spec-basis · evidence-incomplete · robotics-simulation missing/out-of-tolerance, NEW (ADR-2607150600) · royalty-mismatch · extraction-permit-invalid, FLAGSHIP NEW, the 76th unconditional-evaluation-discipline grounding · blast-safety-clearance-unconfirmed, CONDITIONAL, the 77th grounding) + 2 double-actuation guards + 1 soft (confidence/actuation gate) |
+| `src/quarryops/phase.cljk` | **Phase 0→3** -- read-only → assisted intake → assisted assess (+ robotics simulation) → supervised (extraction/shipment always human; extraction intake is the ONLY auto-eligible op, no direct capital risk) |
+| `src/quarryops/operation.cljk` | **OperationActor** -- langgraph StateGraph |
+| `src/quarryops/sim.cljk` | demo driver |
 | `test/quarryops/*_test.clj` | governor contract · phase invariants · store parity · registry conformance · facts coverage |
 
 ## Business-process coverage (honest)
