@@ -115,7 +115,7 @@ prior governor's guards establish, informed by `cloud-itonami-isic-
 `quarryops.store/Store` is implemented by both `MemStore` (atom-
 backed, default for dev/tests/demo) and `DatomicStore` (`langchain.
 db`-backed), proven to satisfy the same contract in
-`test/quarryops/store_contract_test.clj`.
+`test/quarryops/store_contract_test.cljk`.
 
 ### Decision 9: no bespoke domain capability lib, and no `blueprint.edn` field-sync fixes needed
 
@@ -165,7 +165,7 @@ extracting material or auto-shipping a consignment).
   application overall) and `blast-safety-clearance-unconfirmed?`
   (77th distinct application overall, the EIGHTH conditional variant).
 - `MemStore` ‖ `DatomicStore` parity is proven by
-  `test/quarryops/store_contract_test.clj`.
+  `test/quarryops/store_contract_test.cljk`.
 - 39 tests / 176 assertions pass; lint is clean; the demo
   (`clojure -M:dev:run`) walks two clean extraction+shipment
   lifecycles (no-blast, blast-confirmed), plus four HARD-hold
