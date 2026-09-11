@@ -5,7 +5,7 @@
   Wave1 Lane A-hand): drives the REAL actor stack
   (`quarryops.operation` -> `quarryops.governor` -> `quarryops.store`)
   through a scenario adapted from this repo's own `quarryops.sim` demo
-  driver (`clojure -M:dev:run`, confirmed against real seeded
+  driver (`kbb -M:dev:run`, confirmed against real seeded
   extraction ids `extraction-1`..`extraction-7` that match
   `quarryops.store/demo-data`), trimmed to a representative subset
   (one full intake->assess->robot-verify->extract->ship lifecycle, and
@@ -17,7 +17,7 @@
   Styling follows the 9522/`applianceshop.render-html` reference:
   `jp-go-dds.skin/dds+skin` (デジタル庁デザインシステム + skin).
 
-  Usage: `clojure -M:dev:render-html [out-file]`
+  Usage: `kbb -M:dev:render-html [out-file]`
   (default `docs/samples/operator-console.html`)."
   (:require [jp-go-dds.skin]
             [kotoba.lang.text :as str]
@@ -177,7 +177,7 @@
      "<main>\n"
      "  <section class=\"card\">\n"
      "    <h2>Extractions</h2>\n"
-     "    <p class=\"muted\">Demo snapshot — build-time-generated from <code>quarryops.store</code> via <code>quarryops.render-html</code> (<code>clojure -M:dev:render-html</code>), regenerated nightly.</p>\n"
+     "    <p class=\"muted\">Demo snapshot — build-time-generated from <code>quarryops.store</code> via <code>quarryops.render-html</code> (<code>kbb -M:dev:render-html</code>), regenerated nightly.</p>\n"
      "    <table>\n"
      "      <thead><tr><th>Extraction</th><th>Site</th><th>Material</th><th>Jurisdiction</th><th>Extract/ship status</th><th>Last op status</th></tr></thead>\n"
      "      <tbody>\n"
