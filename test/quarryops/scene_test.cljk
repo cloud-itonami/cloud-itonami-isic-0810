@@ -6,7 +6,7 @@
   (see quarryops.scene's docstring). Direct port of autoparts.scene-
   test's/fab.scene-test's own assertions (ADR-2607160000/ADR-2607992500),
   adapted to a plain extraction map instead of a part-lot/lot."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [quarryops.robotics :as robotics]
             [quarryops.scene :as scene]))
 
