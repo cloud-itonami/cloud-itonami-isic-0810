@@ -1,5 +1,5 @@
 (ns quarryops.registry-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [kotoba.test :refer [deftest is]]
             [quarryops.registry :as r]))
 
 ;; ----------------------------- royalty-matches-claim? -----------------------------

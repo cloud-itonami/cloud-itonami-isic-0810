@@ -7,7 +7,7 @@
   walks through) and NOT to the physics-simulated fragment's own free-
   fall trajectory (which this ns does not, and should not, plan a route
   through)."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [quarryops.cad :as cad]
             [quarryops.motionplan :as motionplan]
             [quarryops.robotics :as robotics]))

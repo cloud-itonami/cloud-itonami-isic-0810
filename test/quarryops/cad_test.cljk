@@ -5,7 +5,7 @@
   here is a FORMULA of :fragment-mass-kg, not a fixed constant -- see
   quarryops.cad's own docstring for why), and envelope-solid/
   envelope-mesh's genuine tessellation output."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [quarryops.cad :as cad]
             [quarryops.robotics :as robotics]))
 

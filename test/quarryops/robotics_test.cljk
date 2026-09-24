@@ -13,7 +13,7 @@
   autoparts/fab found carries over unchanged. See `quarryops.robotics/
   simulate-bench-face-settling`'s own docstring for the full narrative
   of what was assumed first, then verified, then corrected."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [quarryops.cad :as cad]
             [quarryops.robotics :as robotics]))
 
