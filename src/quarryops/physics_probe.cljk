@@ -1,0 +1,91 @@
+(ns quarryops.physics-probe
+  "The physical-AI bot's measurement: run this actor's REAL `physics-2d`
+  bench-face loose-block free-fall/settling simulation over a fixed sweep
+  and print ONE EDN map of the physical quantities it computed.
+
+    kbb -M:dev:physics
+
+  This is what the resident bot (hermes/profiles/physai-isic-0810/SOUL.md)
+  reads every tick. It is the only thing the bot may call \"measured\":
+  each number below is derived from a time-stepped trajectory by
+  `quarryops.robotics`, never typed in. Output schema
+  `itonami.physical-ai.probe.v1`:
+
+    {:physics-probe/schema \"itonami.physical-ai.probe.v1\"
+     :repo      \"cloud-itonami/cloud-itonami-isic-0810\"
+     :procedure \"...\"
+     :solver    \"physics-2d/world-step\"
+     :runs      [{:input {...} :quantities {...} :out-of-tolerance? bool} ...]
+     :derived   {...}           ; quantities computed ACROSS runs
+     :count     n :expected n}
+
+  `:count` is an evidence floor: 0 means \"could not measure\", never
+  \"nothing out of tolerance\". Exit 0 when every run produced numbers,
+  2 when any run did not."
+  (:require [quarryops.robotics :as robotics]))
+
+(def schema "itonami.physical-ai.probe.v1")
+
+(def fragment-mass-kg
+  "The fragment mass the robotics tests pin (180 kg)."
+  180.0)
+
+(def sweep-drop-heights-m
+  "Bench drop heights swept each tick. 4.0 m is the fixture the robotics
+  tests pin; the others bracket the default catch-bench rating
+  (`robotics/default-catch-bench-rated-height-m`, 10 m) from both sides."
+  [1.0 2.0 4.0 8.0 12.0])
+
+(defn- extraction [drop-m]
+  {:fragment-mass-kg fragment-mass-kg :bench-drop-height-m drop-m})
+
+(defn- out-at? [drop-m]
+  (let [e (extraction drop-m)]
+    (robotics/bench-face-settling-out-of-tolerance?
+     (merge e (robotics/bench-face-settling-telemetry-for e)))))
+
+(defn- run-one [drop-m]
+  (let [e (extraction drop-m)
+        t (robotics/bench-face-settling-telemetry-for e)]
+    {:input e
+     :quantities t
+     :out-of-tolerance? (robotics/bench-face-settling-out-of-tolerance? (merge e t))}))
+
+(defn max-passing-drop-height-m
+  "Largest bench drop height whose REAL simulated settling distance and
+  impact energy stay inside the default catch-bench rating, by bisection
+  over the simulation (tolerance flips once: in tolerance below, out
+  above -- pinned by `physics-probe-test`). nil when the bracket does not
+  straddle the flip."
+  ([] (max-passing-drop-height-m 0.5 20.0 40))
+  ([lo hi iters]
+   (when (and (not (out-at? lo)) (out-at? hi))
+     (loop [lo lo hi hi i 0]
+       (if (>= i iters)
+         lo
+         (let [mid (/ (+ lo hi) 2.0)]
+           (if (out-at? mid)
+             (recur lo mid (inc i))
+             (recur mid hi (inc i)))))))))
+
+(defn probe []
+  (let [runs (mapv run-one sweep-drop-heights-m)
+        numeric? (fn [r] (and (number? (get-in r [:quantities :sim-impact-energy-j]))
+                              (number? (get-in r [:quantities :sim-settling-distance-m]))))]
+    {:physics-probe/schema schema
+     :repo "cloud-itonami/cloud-itonami-isic-0810"
+     :procedure "Quarry bench-face loose-block rockfall onto a catch bench (robot face-verification cell; catch-bench rating per Ritchie-criteria-style design height)"
+     :solver "physics-2d/world-step"
+     :runs runs
+     :derived {:catch-bench-rated-height-m robotics/default-catch-bench-rated-height-m
+               :fragment-mass-kg fragment-mass-kg
+               :max-passing-drop-height-m (max-passing-drop-height-m)}
+     :count (count (filter numeric? runs))
+     :expected (count sweep-drop-heights-m)}))
+
+(defn -main [& _]
+  (let [p (probe)]
+    (prn p)
+    (when-not (= (:count p) (:expected p))
+      #?(:cljs (set! (.-exitCode js/process) 2)
+         :default (System/exit 2)))))
